@@ -78,7 +78,7 @@ EXCEPTION
         RAISE_APPLICATION_ERROR(-20001,
             'Error in TRG_check_VI_PHAM: ' || SQLERRM);
 END;
-
+/
 --checked
 
 -- CAP NHAT SAN LUONG CHUYEN DANH BAT
@@ -98,6 +98,34 @@ EXCEPTION
     WHEN OTHERS THEN
     RAISE_APPLICATION_ERROR(-20002,
             'Error in TRG_update_weight: ' || SQLERRM);
+END;
+/
+
+--check ThoiGianThaLuoi va ThoiGianKeoLuoi
+CREATE OR REPLACE TRIGGER TRG_check_date_ME_CA
+BEFORE INSERT OR UPDATE ON ME_CA
+FOR EACH ROW
+DECLARE
+    v_NgayXuatBen date;
+    v_MaChuyenDanhBat ME_CA.MaChuyenDanhBat%TYPE;
+BEGIN
+    v_MaChuyenDanhBat := :NEW.MaChuyenDanhBat;
+    
+    SELECT NgayXuatBen
+    INTO v_NgayXuatBen
+    FROM CHUYEN_DANH_BAT
+    WHERE MaChuyenDanhBat = v_MaChuyenDanhBat;
+
+    IF :NEW.ThoiGianThaLuoi < v_NgayXuatBen OR :NEW.ThoiGianThaLuoi > SYSDATE THEN
+        RAISE_APPLICATION_ERROR(-number, 'Error in TRG_check_date_ME_CA: ThoiGianThaLuoi khong dung');
+    ELSIF :NEW.ThoiGianKeoLuoi < :NEW.ThoiGianThaLuoi OR :NEW.ThoiGianKeoLuoi > SYSDATE THEN
+        RAISE_APPLICATION_ERROR(-number, 'Error in TRG_check_date_ME_CA: ThoiGianKeoLuoi khong dung');
+    END IF;
+
+EXCEPTION
+    WHEN OTHERS THEN
+    RAISE_APPLICATION_ERROR(-20002,
+            'Error in TRG_check_date_ME_CA: ' || SQLERRM);
 END;
 /
 --checked
@@ -1012,7 +1040,13 @@ CREATE OR REPLACE PROCEDURE insert_LOG_HAI_TRINH_for_CHUYEN_DANH_BAT(
 )
 IS
    v_exists NUMBER; 
+   v_NgayXuatBen CHUYEN_DANH_BAT.NgayXuatBen%TYPE;
 BEGIN
+    SELECT NgayXuatBen
+        INTO v_NgayXuatBen
+        FROM CHUYEN_DANH_BAT
+    WHERE MaChuyenDanhBat = p_MaChuyenDanhBat;
+
     SELECT COUNT(*) 
         INTO v_exists
         FROM CHUYEN_DANH_BAT
@@ -1020,8 +1054,10 @@ BEGIN
 
     IF v_exists = 0 THEN
         RAISE_APPLICATION_ERROR(-20047, 
-            'insert_LOG_HAI_TRINH_for_CHUYEN_DANH_BAT: Chuyen danh bat khong ton tai.'
-        );
+            'insert_LOG_HAI_TRINH_for_CHUYEN_DANH_BAT: Chuyen danh bat khong ton tai.');
+    ELSIF p_ThoiGian < v_NgayXuatBen AND p_ThoiGian > SYSDATE THEN
+        RAISE_APPLICATION_ERROR(-20047, 
+            'insert_LOG_HAI_TRINH_for_CHUYEN_DANH_BAT: ThoiGian khong dung');
     END IF;
 
     INSERT INTO LOG_HAI_TRINH(MaChuyenDanhBat, ThoiGian, ViTri, VanToc, HuongDiChuyen)
