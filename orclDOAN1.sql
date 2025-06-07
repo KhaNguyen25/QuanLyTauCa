@@ -19,7 +19,7 @@ BEGIN
     WHERE vp.MaChuyenDanhBat = :NEW.MaChuyenDanhBat;
 
     IF SDO_CONTAINS(v_poly, :NEW.ViTri) = 'FALSE' AND v_Count = 0 THEN
-        insert_VI_PHAM(:NEW.MaChuyenDanhBat, :NEW.ViTri, 'Vi pham vung bien');
+        insert_VI_PHAM(:NEW.MaChuyenDanhBat, SDO_UTIL.TO_WKTGEOMETRY(:NEW.ViTri), 'Vi pham vung bien');
     END IF;
 
 EXCEPTION
@@ -65,7 +65,8 @@ BEGIN
         END IF;
     EXCEPTION
         WHEN OTHERS THEN
-            v_contains := 0; -- Nếu lỗi cũng coi là không chứa
+            RAISE_APPLICATION_ERROR(-200065,
+                'Error in TRG_check_VI_PHAM: SDO_CONTAINS, ' || SQLERRM);
     END;
 
     IF v_contains = 0 AND v_Count = 0 THEN
@@ -1120,34 +1121,29 @@ BEGIN
     EXCEPTION
         WHEN OTHERS THEN
             RAISE_APPLICATION_ERROR(
-                -20051,
-                'Error in insert_VI_PHAM: WKT không hợp lệ. ' || SQLERRM
-            );
+                -20050,
+                'Error in insert_VI_PHAM: WKT không hợp lệ. ' || SQLERRM);
     END;
 
     -- 2) Thêm dữ liệu vào bảng VI_PHAM
     INSERT INTO VI_PHAM (
         MaChuyenDanhBat,
         ViTri,
-        MoTa,
-        ThoiGian
+        MoTa
     ) VALUES (
         p_MaChuyenDanhBat,
         v_ViTri,
-        p_MoTa,
-        SYSDATE
+        p_MoTa
     );
 
 EXCEPTION
     WHEN OTHERS THEN
         RAISE_APPLICATION_ERROR(
-            -20052,
+            -20066,
             'Error in insert_VI_PHAM: ' || SQLERRM
         );
 END insert_VI_PHAM;
 /
-
-
 --checked
 
 -- Cap nhat MoTa cua VI_PHAM
