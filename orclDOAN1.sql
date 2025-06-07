@@ -28,6 +28,56 @@ EXCEPTION
             'Error in TRG_check_VI_PHAM: ' || SQLERRM);
 END;
 /
+--DE xuat chinh sua
+CREATE OR REPLACE TRIGGER TRG_check_VI_PHAM
+AFTER INSERT ON LOG_HAI_TRINH
+FOR EACH ROW
+DECLARE
+    v_poly SDO_GEOMETRY;
+    v_Count NUMBER;
+    v_contains  NUMBER := 0;  -- khởi tạo mặc định
+BEGIN
+    -- Lấy vùng ngư trường
+    SELECT nt.ViTri
+    INTO v_poly
+    FROM CHUYEN_DANH_BAT cdb
+    JOIN NGU_TRUONG nt ON nt.MaNguTruong = cdb.MaNguTruong
+    WHERE cdb.MaChuyenDanhBat = :NEW.MaChuyenDanhBat;
+
+    -- Đếm số vi phạm hiện tại
+    SELECT count(*)
+    INTO v_Count
+    FROM VI_PHAM vp
+    WHERE vp.MaChuyenDanhBat = :NEW.MaChuyenDanhBat;
+
+    -- Kiểm tra SDO_CONTAINS an toàn
+    BEGIN
+        IF v_poly IS NOT NULL AND :NEW.ViTri IS NOT NULL THEN
+            SELECT SDO_CONTAINS(v_poly, :NEW.ViTri)
+            INTO v_contains
+            FROM DUAL;
+            -- Nếu NULL thì gán 0
+            IF v_contains IS NULL THEN
+                v_contains := 0;
+            END IF;
+        ELSE
+            v_contains := 0;
+        END IF;
+    EXCEPTION
+        WHEN OTHERS THEN
+            v_contains := 0; -- Nếu lỗi cũng coi là không chứa
+    END;
+
+    IF v_contains = 0 AND v_Count = 0 THEN
+        insert_VI_PHAM(:NEW.MaChuyenDanhBat, SDO_UTIL.TO_WKTGEOMETRY(:NEW.ViTri), 'Vi pham vung bien');
+    END IF;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE_APPLICATION_ERROR(-20001,
+            'Error in TRG_check_VI_PHAM: ' || SQLERRM);
+END;
+
 --checked
 
 -- CAP NHAT SAN LUONG CHUYEN DANH BAT
@@ -1036,6 +1086,7 @@ END;
 --checked
 
 -- Insert VI_PHAM
+-- tuong tu voi insert_NGU_TRUONG
 CREATE OR REPLACE PROCEDURE insert_VI_PHAM(
     p_MaChuyenDanhBat   VI_PHAM.MaChuyenDanhBat%TYPE,
     p_ViTri             VARCHAR2,
@@ -1052,6 +1103,51 @@ EXCEPTION
             'Error in insert_VI_PHAM: ' || SQLERRM);
 END;
 /
+
+--DE XUAT CHINH SUA
+CREATE OR REPLACE PROCEDURE insert_VI_PHAM(
+    p_MaChuyenDanhBat   IN VI_PHAM.MaChuyenDanhBat%TYPE,
+    p_ViTri_WKT         IN VARCHAR2,
+    p_MoTa              IN VI_PHAM.MoTa%TYPE
+)
+IS
+    v_ViTri SDO_GEOMETRY;
+BEGIN
+    -- 1) Chuyển WKT sang SDO_GEOMETRY và gán SRID
+    BEGIN
+        v_ViTri := SDO_UTIL.FROM_WKTGEOMETRY(p_ViTri_WKT);
+        v_ViTri.SDO_SRID := 4326;
+    EXCEPTION
+        WHEN OTHERS THEN
+            RAISE_APPLICATION_ERROR(
+                -20051,
+                'Error in insert_VI_PHAM: WKT không hợp lệ. ' || SQLERRM
+            );
+    END;
+
+    -- 2) Thêm dữ liệu vào bảng VI_PHAM
+    INSERT INTO VI_PHAM (
+        MaChuyenDanhBat,
+        ViTri,
+        MoTa,
+        ThoiGian
+    ) VALUES (
+        p_MaChuyenDanhBat,
+        v_ViTri,
+        p_MoTa,
+        SYSDATE
+    );
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE_APPLICATION_ERROR(
+            -20052,
+            'Error in insert_VI_PHAM: ' || SQLERRM
+        );
+END insert_VI_PHAM;
+/
+
+
 --checked
 
 -- Cap nhat MoTa cua VI_PHAM
@@ -1077,6 +1173,7 @@ END;
 
 -- THEM THONG TIN NGU TRUONG
 -- insert_NGU_TRUONG
+-- LOI
 CREATE OR REPLACE PROCEDURE insert_NGU_TRUONG(
     p_TenNguTruong        NGU_TRUONG.TenNguTruong%TYPE,
     p_ViTri               CLOB,
@@ -1086,6 +1183,7 @@ IS
     v_ViTri SDO_GEOMETRY;
 BEGIN
     BEGIN
+        -- ham FROM_WKTGEOMETRY chi nhan 1 tham so , SRID ban dau = NULL --> phai set sau 
         v_ViTri := SDO_UTIL.FROM_WKTGEOMETRY(DBMS_LOB.SUBSTR(p_ViTri, 32767, 1), 4326);
     EXCEPTION
         WHEN OTHERS THEN
@@ -1101,6 +1199,55 @@ EXCEPTION
             'Error in insert_NGU_TRUONG: ' || SQLERRM);
 END;
 /
+
+-- DE XUAT CHINH SUA
+CREATE OR REPLACE PROCEDURE insert_NGU_TRUONG(
+    p_TenNguTruong      IN NGU_TRUONG.TenNguTruong%TYPE,
+    p_ViTri_WKT         IN CLOB,
+    p_SoLuongTauToiDa   IN NGU_TRUONG.SoLuongTauToiDa%TYPE
+)
+IS
+    v_WktShort  VARCHAR2(32767);
+    v_ViTri     SDO_GEOMETRY;
+BEGIN
+    -- 1. Lấy chuỗi WKT (tối đa 32767 ký tự) từ CLOB
+    v_WktShort := DBMS_LOB.SUBSTR(p_ViTri_WKT, 32767, 1);
+
+    -- 2. Chuyển WKT thành SDO_GEOMETRY (SRID ban đầu = NULL)
+    BEGIN
+        v_ViTri := SDO_UTIL.FROM_WKTGEOMETRY(v_WktShort);
+    EXCEPTION
+        WHEN OTHERS THEN
+            RAISE_APPLICATION_ERROR(
+                -20052,
+                'Error in insert_NGU_TRUONG: WKT không hợp lệ. ' || SQLERRM
+            );
+    END;
+
+    -- 3. Gán SRID = 4326 cho đối tượng geometry vừa tạo
+    v_ViTri.SDO_SRID := 4326;
+
+    -- 4. Thực hiện chèn vào bảng (MaNguTruong do trigger tự sinh)
+    INSERT INTO NGU_TRUONG (
+      TenNguTruong,
+      ViTri,
+      SoLuongTauToiDa
+    )
+    VALUES (
+      p_TenNguTruong,
+      v_ViTri,
+      p_SoLuongTauToiDa
+    );
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE_APPLICATION_ERROR(
+            -20053,
+            'Error in insert_NGU_TRUONG: ' || SQLERRM
+        );
+END insert_NGU_TRUONG;
+/
+
 --checked
 
 -- XEM THONG TIN NGU TRUONG
@@ -1333,3 +1480,165 @@ END;
 VAR c REFCURSOR;
 EXEC Hien_thi_danh_sach_tau_ca_cua_chu_tau(:c, 'USER01');
 PRINT c;
+
+
+INSERT INTO APP_USER (USERNAME, PASSWORD, ROLE)
+VALUES ('admin1', 'passAdmin', 'ADMIN');
+
+INSERT INTO APP_USER (USERNAME, PASSWORD, ROLE)
+VALUES ('chutau1', 'passChuTau', 'CHUTAU');
+
+SELECT * 
+FROM APP_USER;
+
+INSERT INTO ADMIN (MaAdmin, HoTen, CoQuan, CCCD)
+VALUES ('USER1', 'Nguyễn Văn A', 'Bộ Tài nguyên Môi trường', '123456789');
+
+INSERT INTO CHU_TAU (MaChuTau, HoTen, SDT, DiaChi, CCCD, TrangThaiDuyet)
+VALUES ('USER2', 'Trần Thị B', '0987654321', 'Hải Phòng', '987654321', 'DA DUYET');
+
+select *
+from CHU_TAU;
+
+select *
+from ADMIN;
+
+INSERT INTO NGHE (TenNghe) VALUES ('Cá biển');
+INSERT INTO NGHE (TenNghe) VALUES ('Cá sông');
+
+select *
+from NGHE;
+
+INSERT INTO TAU_CA (
+  SoDangKy, LoaiTau, ChieuDai, CongSuat, NamDongTau,
+  TrangThaiDuyet, TrangThaiHoatDong, MaChuTau, MaNgheChinh
+) VALUES (
+  'DK001', 'Tàu đánh cá xa bờ', 30.5, 120.0, 2018,
+  'DA DUYET', 'DANG HOAT DONG', 'USER2', 'NGHE1'
+);
+
+select * 
+from TAU_CA;
+
+INSERT INTO TAU_NGHE (MaTauCa, MaNghe, VungHoatDong)
+VALUES ('TC1', 'NGHE2', 'Vịnh Hạ Long');
+
+select *
+from TAU_NGHE;
+
+
+INSERT INTO NGU_TRUONG (
+  TenNguTruong,
+  ViTri,
+  SoLuongTauHienTai,
+  SoLuongTauToiDa
+) VALUES (
+  'Ngư trường A',
+  -- Khởi tạo SDO_GEOMETRY với SRID = 4326
+  SDO_GEOMETRY(
+    2003,             -- SDO_GTYPE: 2003 nghĩa là POLYGON
+    4326,             -- SDO_SRID
+    NULL,             -- SDO_POINT (NULL vì đây là POLYGON, không dùng point)
+    SDO_ELEM_INFO_ARRAY(1,1003,1),
+    SDO_ORDINATE_ARRAY(
+      0, 0,
+      0, 10,
+      10, 10,
+      10, 0,
+      0, 0
+    )
+  ),
+  0,      -- SoLuongTauHienTai mặc định = 0
+  1000    -- SoLuongTauToiDa
+);
+COMMIT;
+
+
+select *
+from NGU_TRUONG;
+
+
+select *
+from NGU_TRUONG;
+
+SELECT 
+  MaNguTruong,
+  TenNguTruong,
+  SDO_UTIL.TO_WKTGEOMETRY(ViTri) AS ViTri_WKT,
+  SoLuongTauHienTai,
+  SoLuongTauToiDa
+FROM NGU_TRUONG;
+
+SELECT MaNguTruong,
+  TenNguTruong,
+  SUBSTR(
+    SDO_UTIL.TO_WKTGEOMETRY(ViTri), 
+    INSTR(SDO_UTIL.TO_WKTGEOMETRY(ViTri),'((') + 1,
+    INSTR(SDO_UTIL.TO_WKTGEOMETRY(ViTri),'))') 
+    - INSTR(SDO_UTIL.TO_WKTGEOMETRY(ViTri),'((') - 1
+  ) AS ToaDoOnly
+FROM NGU_TRUONG;
+
+
+
+INSERT INTO CHUYEN_DANH_BAT (
+  NgayXuatBen, NgayCapBen, CangDi, CangVe,
+  TongKhoiLuong, TrangThaiDuyet, TrangThaiHoatDong, MaTauCa, MaNguTruong
+) VALUES (
+  TO_DATE('2025-06-01','YYYY-MM-DD'),
+  TO_DATE('2025-06-05','YYYY-MM-DD'),
+  'Cảng Hải Phòng',
+  'Cảng Đà Nẵng',
+  0,
+  'DANG CHO',
+  'DANG CHO',
+  'TC1',
+  'NT1'
+);
+
+select *
+from CHUYEN_DANH_BAT;
+
+--test procedure insert_NGU_TRUONG
+BEGIN
+  -- Thêm ngư trường với WKT hợp lệ
+  insert_NGU_TRUONG(
+    'Ngư trường Test 1',
+    'POLYGON((2 2, 2 4, 4 4, 4 2, 2 2))',  -- WKT mô tả hình vuông
+    5                                      -- Số lượng tàu tối đa
+  );
+  COMMIT;
+END;
+/
+
+INSERT INTO LOG_HAI_TRINH (
+  MaChuyenDanhBat, ThoiGian, ViTri, VanToc, HuongDiChuyen
+) VALUES (
+  'CDP2',
+  SYSTIMESTAMP,
+  SDO_GEOMETRY(
+    2001, 
+    4326,
+    SDO_POINT_TYPE(5,5,NULL),
+    NULL, NULL
+  ),
+  8.5,
+  'Đông Nam'
+);
+
+
+select *
+from LOG_HAI_TRINH;
+
+SELECT * FROM VI_PHAM;
+
+
+INSERT INTO THUY_SAN (TenLoaiThuySan) VALUES ('Ca thu');
+
+SELECT * FROM THUY_SAN;
+
+
+
+
+
+
