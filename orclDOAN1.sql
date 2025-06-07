@@ -63,6 +63,7 @@ BEGIN
         ELSE
             v_contains := 0;
         END IF;
+
     EXCEPTION
         WHEN OTHERS THEN
             RAISE_APPLICATION_ERROR(-200065,
@@ -701,7 +702,7 @@ END;
 -- Tao CHUYEN_DANH_BAT
 CREATE OR REPLACE PROCEDURE insert_CHUYEN_DANH_BAT(
     p_NgayXuatBen       CHUYEN_DANH_BAT.NgayXuatBen%TYPE,
-    p_NgayXuatBen       CHUYEN_DANH_BAT.NgayXuatBen%TYPE,
+    p_NgayCapBen       CHUYEN_DANH_BAT.NgayCapBen%TYPE,
     p_CangDi            CHUYEN_DANH_BAT.CangDi%TYPE,
     p_CangVe            CHUYEN_DANH_BAT.CangVe%TYPE,
     p_MaTauCa           CHUYEN_DANH_BAT.MaTauCa%TYPE,
@@ -724,7 +725,7 @@ BEGIN
     IF p_TrangThaiDuyetChuTau = 'DA DUYET' AND p_TrangThaiDuyetTauCa = 'DA DUYET' AND p_TrangThaiHoatDongTauCa = 'DANG CHO|CHUA DK' AND p_KtraSoLuongTau = TRUE THEN
         INSERT INTO CHUYEN_DANH_BAT(
             NgayXuatBen,
-            NgayXuatBen,
+            NgayCapBen,
             CangDi,
             CangVe,
             MaTauCa,
@@ -732,7 +733,7 @@ BEGIN
         )
         VALUES(
             p_NgayXuatBen,
-            p_NgayXuatBen,
+            p_NgayCapBen,
             p_CangDi,
             p_CangVe,
             p_MaTauCa,
