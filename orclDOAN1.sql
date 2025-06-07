@@ -336,24 +336,32 @@ END;
 --checked
 
 -- Lay thong tin THOI_TIET moi nhat
-CREATE OR REPLACE PROCEDURE get_newest_weather_info(
-    weather_cursor OUT SYS_REFCURSOR
+CREATE OR REPLACE PROCEDURE get_weather_info(
+    weather_cursor OUT SYS_REFCURSOR,
+    NgayDuBao   DATE
 )
 IS
+    p_count INTEGER;
 BEGIN
+    SELECT COUNT(*)
+    INTO p_count
+    FROM THOI_TIET
+    WHERE TRUNC(ThoiGianDuBao) = TRUNC(NgayDuBao);
+
+    IF p_count = 0 THEN
+        RAISE_APPLICATION_ERROR(-number, 'Error in get_weather_info: Khong co du bao cho ngay ' || TO_CHAR(NgayDuBao, 'YYYY-MM-DD'));
+    END IF;
+
     OPEN weather_cursor FOR
         SELECT *
-        FROM (
-            SELECT *
-            FROM THOI_TIET
-            ORDER BY ThoiGianDuBao DESC
-        )
-        WHERE ROWNUM = 1;
+        FROM THOI_TIET
+        WHERE TRUNC(ThoiGianDuBao) = TRUNC(NgayDuBao)
+        ORDER BY ThoiGianDuBao ASC;
 
 EXCEPTION
     WHEN OTHERS THEN
     RAISE_APPLICATION_ERROR(-20015,
-            'Error in get_newest_weather_info: ' || SQLERRM);
+            'Error in get_weather_info: ' || SQLERRM);
 END;
 /
 --checked
