@@ -6,35 +6,6 @@ FOR EACH ROW
 DECLARE
     v_poly SDO_GEOMETRY;
     v_Count NUMBER;
-BEGIN
-    SELECT nt.ViTri
-    INTO v_poly
-    FROM CHUYEN_DANH_BAT cdb
-    JOIN NGU_TRUONG nt ON nt.MaNguTruong = cdb.MaNguTruong
-    WHERE cdb.MaChuyenDanhBat = :NEW.MaChuyenDanhBat;
-
-    SELECT count(*)
-    INTO v_Count
-    FROM VI_PHAM vp
-    WHERE vp.MaChuyenDanhBat = :NEW.MaChuyenDanhBat;
-
-    IF SDO_CONTAINS(v_poly, :NEW.ViTri) = 'FALSE' AND v_Count = 0 THEN
-        insert_VI_PHAM(:NEW.MaChuyenDanhBat, SDO_UTIL.TO_WKTGEOMETRY(:NEW.ViTri), 'Vi pham vung bien');
-    END IF;
-
-EXCEPTION
-    WHEN OTHERS THEN
-    RAISE_APPLICATION_ERROR(-20001,
-            'Error in TRG_check_VI_PHAM: ' || SQLERRM);
-END;
-/
---DE xuat chinh sua
-CREATE OR REPLACE TRIGGER TRG_check_VI_PHAM
-AFTER INSERT ON LOG_HAI_TRINH
-FOR EACH ROW
-DECLARE
-    v_poly SDO_GEOMETRY;
-    v_Count NUMBER;
     v_contains  NUMBER := 0;  -- khởi tạo mặc định
 BEGIN
     -- Lấy vùng ngư trường
@@ -71,7 +42,7 @@ BEGIN
     END;
 
     IF v_contains = 0 AND v_Count = 0 THEN
-        insert_VI_PHAM(:NEW.MaChuyenDanhBat, SDO_UTIL.TO_WKTGEOMETRY(:NEW.ViTri), 'Vi pham vung bien');
+        insert_VI_PHAM(:NEW.MaChuyenDanhBat, :NEW.ThoiGian, SDO_UTIL.TO_WKTGEOMETRY(:NEW.ViTri), 'Vi pham vung bien');
     END IF;
 
 EXCEPTION
@@ -1124,27 +1095,9 @@ END;
 --checked
 
 -- Insert VI_PHAM
--- tuong tu voi insert_NGU_TRUONG
-CREATE OR REPLACE PROCEDURE insert_VI_PHAM(
-    p_MaChuyenDanhBat   VI_PHAM.MaChuyenDanhBat%TYPE,
-    p_ViTri             VARCHAR2,
-    p_MoTa              VI_PHAM.MoTa%TYPE
-)
-IS
-BEGIN
-    INSERT INTO VI_PHAM(MaChuyenDanhBat, ViTri, MoTa)
-    VALUES (p_MaChuyenDanhBat, SDO_UTIL.FROM_WKTGEOMETRY(p_ViTri, 4326), p_MoTa);
-
-EXCEPTION
-    WHEN OTHERS THEN
-        RAISE_APPLICATION_ERROR(-20050,
-            'Error in insert_VI_PHAM: ' || SQLERRM);
-END;
-/
-
---DE XUAT CHINH SUA
 CREATE OR REPLACE PROCEDURE insert_VI_PHAM(
     p_MaChuyenDanhBat   IN VI_PHAM.MaChuyenDanhBat%TYPE,
+    p_ThoiGian          IN VI_PHAM.ThoiGian%TYPE,
     p_ViTri_WKT         IN VARCHAR2,
     p_MoTa              IN VI_PHAM.MoTa%TYPE
 )
@@ -1165,10 +1118,12 @@ BEGIN
     -- 2) Thêm dữ liệu vào bảng VI_PHAM
     INSERT INTO VI_PHAM (
         MaChuyenDanhBat,
+        ThoiGian,
         ViTri,
         MoTa
     ) VALUES (
         p_MaChuyenDanhBat,
+        p_ThoiGian,
         v_ViTri,
         p_MoTa
     );
@@ -1206,34 +1161,6 @@ END;
 
 -- THEM THONG TIN NGU TRUONG
 -- insert_NGU_TRUONG
--- LOI
-CREATE OR REPLACE PROCEDURE insert_NGU_TRUONG(
-    p_TenNguTruong        NGU_TRUONG.TenNguTruong%TYPE,
-    p_ViTri               CLOB,
-    p_SoLuongTauToiDa     NGU_TRUONG.SoLuongTauToiDa%TYPE
-)
-IS 
-    v_ViTri SDO_GEOMETRY;
-BEGIN
-    BEGIN
-        -- ham FROM_WKTGEOMETRY chi nhan 1 tham so , SRID ban dau = NULL --> phai set sau 
-        v_ViTri := SDO_UTIL.FROM_WKTGEOMETRY(DBMS_LOB.SUBSTR(p_ViTri, 32767, 1), 4326);
-    EXCEPTION
-        WHEN OTHERS THEN
-            RAISE_APPLICATION_ERROR(-20052, 'Error in insert_NGU_TRUONG: WKT không hợp lệ, ' || SQLERRM);
-    END;
-
-    INSERT INTO NGU_TRUONG (TenNguTruong, ViTri, SoLuongTauToiDa)
-        VALUES (p_TenNguTruong, v_ViTri, p_SoLuongTauToiDa);
-
-EXCEPTION
-    WHEN OTHERS THEN
-        RAISE_APPLICATION_ERROR(-20053,
-            'Error in insert_NGU_TRUONG: ' || SQLERRM);
-END;
-/
-
--- DE XUAT CHINH SUA
 CREATE OR REPLACE PROCEDURE insert_NGU_TRUONG(
     p_TenNguTruong      IN NGU_TRUONG.TenNguTruong%TYPE,
     p_ViTri_WKT         IN CLOB,
@@ -1280,7 +1207,6 @@ EXCEPTION
         );
 END insert_NGU_TRUONG;
 /
-
 --checked
 
 -- XEM THONG TIN NGU TRUONG
