@@ -56,7 +56,7 @@ CREATE TABLE TAU_NGHE (
 -- 7. Bang VI_PHAM
 CREATE TABLE VI_PHAM (
     MaViPham            NVARCHAR2(20)   PRIMARY KEY,
-    ThoiGian            DATE            DEFAULT SYSDATE,
+    ThoiGian            DATE            NOT NULL,
     ViTri               SDO_GEOMETRY    NOT NULL,
     MoTa                NVARCHAR2(400),
     MaChuyenDanhBat     NVARCHAR2(20)   NOT NULL
@@ -124,8 +124,8 @@ CREATE TABLE NGU_TRUONG (
 
 -- 14. Bang THOI_TIET
 CREATE TABLE THOI_TIET (
-    MaDuBao         NVARCHAR2(20) PRIMARY KEY,
-    ThoiGianDuBao   DATE            DEFAULT SYSDATE,
+    MaDuBao         NVARCHAR2(20)   PRIMARY KEY,
+    ThoiGianDuBao   DATE            NOT NULL,
     KhuVucAnhHuong  NVARCHAR2(100)  NOT NULL,
     ChiTietDuBao    NVARCHAR2(400)  NOT NULL
 );
