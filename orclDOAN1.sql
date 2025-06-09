@@ -37,7 +37,7 @@ BEGIN
 
     EXCEPTION
         WHEN OTHERS THEN
-            RAISE_APPLICATION_ERROR(-200065,
+            RAISE_APPLICATION_ERROR(-20065,
                 'Error in TRG_check_VI_PHAM: SDO_CONTAINS, ' || SQLERRM);
     END;
 
@@ -693,19 +693,21 @@ IS
     p_TrangThaiDuyetChuTau          CHU_TAU.TrangThaiDuyet%TYPE;
     p_TrangThaiDuyetTauCa           TAU_CA.TrangThaiDuyet%TYPE;
     p_TrangThaiHoatDongTauCa        TAU_CA.TrangThaiDuyet%TYPE;
-    p_KtraSoLuongTau                BOOLEAN;
-    
+    f_HienTai                       NGU_TRUONG.SoLuongTauHienTai%TYPE;
+    f_ToiDa                         NGU_TRUONG.SoLuongTauToiDa%TYPE;
 BEGIN
-    
+    SELECT SoLuongTauHienTai, SoLuongTauToiDa
+    INTO f_HienTai, f_ToiDa
+    FROM NGU_TRUONG
+    WHERE MaNguTruong = p_MaNguTruong;
+
     SELECT ct.TrangThaiDuyet, tc.TrangThaiDuyet, tc.TrangThaiHoatDong
     INTO p_TrangThaiDuyetChuTau, p_TrangThaiDuyetTauCa, p_TrangThaiHoatDongTauCa
     FROM TAU_CA tc 
     JOIN CHU_TAU ct ON tc.MaChuTau = ct.MaChuTau
     WHERE tc.MaTauCa = p_MaTauCa;
 
-    p_KtraSoLuongTau := Fn_kiem_tra_so_luong_tau(p_MaNguTruong);
-
-    IF p_TrangThaiDuyetChuTau = 'DA DUYET' AND p_TrangThaiDuyetTauCa = 'DA DUYET' AND p_TrangThaiHoatDongTauCa = 'DANG CHO|CHUA DK' AND p_KtraSoLuongTau = TRUE THEN
+    IF p_TrangThaiDuyetChuTau = 'DA DUYET' AND p_TrangThaiDuyetTauCa = 'DA DUYET' AND p_TrangThaiHoatDongTauCa = 'DANG CHO|CHUA DK' AND f_HienTai <  f_ToiDa THEN
         INSERT INTO CHUYEN_DANH_BAT(
             NgayXuatBen,
             NgayCapBen,
@@ -732,7 +734,7 @@ BEGIN
         WHERE MaTauCa = p_MaTauCa;
 
         UPDATE NGU_TRUONG
-        SET SoLuongTauHienTai = SoLuongTauHienTai + 1
+        SET SoLuongTauHienTai = f_HienTai + 1
         WHERE MaNguTruong = p_MaNguTruong;
    
     ELSIF p_TrangThaiHoatDongTauCa != 'DANG CHO|CHUA DK' THEN
@@ -1453,28 +1455,6 @@ EXCEPTION
     WHEN OTHERS THEN    
         RAISE_APPLICATION_ERROR(-20063,
                 'Error in Fn_dang_nhap: ' || SQLERRM);
-END;
-/
---checked
-
--- Kiem tra so luong tau hien tai
-CREATE OR REPLACE FUNCTION Fn_kiem_tra_so_luong_tau (
-    p_MaNguTruong      NGU_TRUONG.MaNguTruong%TYPE
-) RETURN BOOLEAN
-IS
-    f_HienTai       NGU_TRUONG.SoLuongTauHienTai%TYPE;
-    f_ToiDa         NGU_TRUONG.SoLuongTauToiDa%TYPE;
-BEGIN
-    SELECT SoLuongTauHienTai, SoLuongTauToiDa
-    INTO f_HienTai, f_ToiDa
-    FROM NGU_TRUONG
-    WHERE MaNguTruong = p_MaNguTruong;
-
-    RETURN f_HienTai < f_ToiDa;
-EXCEPTION
-    WHEN OTHERS THEN    
-        RAISE_APPLICATION_ERROR(-20064,
-                'Error in Fn_kiem_tra_so_luong_tau: ' || SQLERRM);
 END;
 /
 --checked
