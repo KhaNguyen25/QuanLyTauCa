@@ -1446,7 +1446,7 @@ BEGIN
     FROM APP_USER
     WHERE USERNAME = p_username AND PASSWORD = p_password;
 
-    RETURN USER_ID;
+    RETURN f_user_id;
 
 EXCEPTION
     WHEN NO_DATA_FOUND THEN
@@ -1699,7 +1699,7 @@ BEGIN
     p_HoTen    => N'Nguyễn Văn A',            
     p_SDT      => N'0912345678',              
     p_DiaChi   => N'123 Đường Lê Lợi, Quận 1', 
-    p_CCCD     => N'012345678901'             
+    p_CCCD     => NC             
   );
 END;
 /
